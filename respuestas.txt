@@ -1,0 +1,108 @@
+LABORATORIO 1 - DETECCION DE PHISHING
+
+Referencias utilizadas para sustentar el enfoque de caracteristicas URL:
+1) Sahingoz, B., et al. (2019). Machine learning based phishing detection from URLs.
+2) Verma, R., y Dyer, C. (2015). On the character of phishing URLs.
+3) Abdelhamid, N., et al. (2014). Phishing detection based on stylometric and lexical URL features.
+
+1. Que ventajas tiene el analisis de una URL contra el analisis de otros datos, como tiempo de vida del dominio o caracteristicas de la pagina web?
+El analisis de URL tiene ventajas operativas claras:
+- Se puede ejecutar en tiempo real antes de abrir el sitio, por lo que permite bloquear temprano.
+- No depende de consultar fuentes externas (WHOIS, DNS pasivo, reputacion), que agregan latencia y pueden fallar.
+- No necesita descargar ni renderizar contenido HTML/JS, reduciendo costo computacional y superficie de riesgo.
+- Es robusto ante paginas efimeras que desaparecen rapido; aunque el sitio ya no exista, la estructura URL queda como evidencia.
+- Facilita despliegue en filtros de correo, gateways y proxies donde la decision debe tomarse en milisegundos.
+
+2. Que caracteristicas de una URL son mas prometedoras para la deteccion de phishing?
+Las mas utiles son las que capturan obfuscacion, suplantacion y anomalias estructurales:
+- Longitudes: URL, host, ruta, query.
+- Complejidad del texto: entropia de Shannon y entropia relativa.
+- Senales de engano: uso de IP, @, punycode, doble slash en ruta, "http" dentro de ruta.
+- Estructura del dominio: subdominios, guion en host (prefijo-sufijo), cantidad de puntos, digitos en host.
+- Patron lexical: palabras sospechosas (login, verify, account, secure, etc.).
+- Proporciones de caracteres: ratio de digitos y ratio de caracteres especiales.
+- Indicadores de abuso comun: acortadores, puerto explicito, exceso de parametros.
+
+3. Que columnas o caracteristicas fueron seleccionadas y por que?
+Se seleccionaron 35 caracteristicas derivadas de URL:
+longitud_url, longitud_host, longitud_ruta, longitud_consulta, longitud_tld, cantidad_puntos, cantidad_guiones, cantidad_guion_bajo, cantidad_arroba, cantidad_interrogacion, cantidad_igual, cantidad_ampersand, cantidad_slash, cantidad_porcentaje, cantidad_digitos, cantidad_especiales, ratio_digitos, ratio_especiales, tiene_https, tiene_ip, cantidad_subdominios, tiene_puerto, palabras_sospechosas, tiene_punycode, tiene_redireccion_doble_slash, tiene_http_en_ruta, token_mas_largo, entropia_shannon, entropia_relativa, es_acortador, tiene_marca_en_host, tiene_prefijo_sufijo_host, cantidad_www, cantidad_digitos_host, ratio_digitos_host.
+La columna original URL se elimino para evitar fuga de informacion textual directa y trabajar solo con variables numericas. Tambien se removieron columnas constantes y altamente correlacionadas para reducir redundancia y mejorar generalizacion.
+
+Balance del dataset:
+El conjunto total quedo practicamente balanceado: 5715 legitimos y 5714 phishing.
+
+METRICAS DE RENDIMIENTO (VALIDACION Y PRUEBA)
+
+Modelo 1: Regresion Logistica
+Validacion:
+- Matriz de confusion: TN=732, FP=126, FN=159, TP=698
+- Precision: 0.8471
+- Recall: 0.8145
+- AUC: 0.9149
+Prueba:
+- Matriz de confusion: TN=1480, FP=235, FN=262, TP=1452
+- Precision: 0.8607
+- Recall: 0.8471
+- AUC: 0.9305
+Interpretacion en contexto phishing:
+- El modelo detecta una buena parte de los correos phishing (recall alto), pero deja pasar 262 casos phishing en prueba (FN), que en seguridad son incidentes reales no bloqueados.
+- La precision indica que, cuando marca phishing, acierta en la mayoria de casos, aunque todavia genera falsos positivos relevantes para operacion.
+
+Modelo 2: Random Forest
+Validacion:
+- Matriz de confusion: TN=751, FP=107, FN=91, TP=766
+- Precision: 0.8774
+- Recall: 0.8938
+- AUC: 0.9578
+Prueba:
+- Matriz de confusion: TN=1520, FP=195, FN=167, TP=1547
+- Precision: 0.8881
+- Recall: 0.9026
+- AUC: 0.9627
+Interpretacion en contexto phishing:
+- Reduce falsos negativos frente a regresion logistica (167 vs 262), por lo que deja pasar menos phishing.
+- Tambien reduce falsos positivos (195 vs 235), mejorando la carga operativa del equipo.
+- Su curva ROC domina a la de regresion logistica y su AUC es mayor en validacion y prueba, mostrando mejor separacion entre clases.
+
+4. Cual es el impacto de clasificar un sitio legitimo como phishing?
+Es un falso positivo. Impacta en productividad y confianza: bloquea accesos validos, aumenta tickets de soporte, provoca fatiga de alertas y puede llevar a que usuarios ignoren alertas futuras.
+
+5. Cual es el impacto de clasificar un sitio de phishing como legitimo?
+Es un falso negativo y es el error mas costoso en ciberseguridad: permite robo de credenciales, posible fraude, compromiso de cuentas y riesgo reputacional/legal.
+
+6. En base a las respuestas anteriores, que metrica elegiria para comparar modelos similares de clasificacion de phishing?
+Elegiria recall de la clase phishing como metrica principal para minimizar falsos negativos. Como metrica de apoyo para comparar de forma global usaria AUC, y para control operativo revisaria precision.
+
+7. Que modelo funciono mejor para la clasificacion de phishing? Por que?
+Random Forest funciono mejor. Tuvo mejor precision, mejor recall y mejor AUC tanto en validacion como en prueba, y ademas produjo menos FP y menos FN.
+
+8. Escenario de negocio (50,000 emails, 15% phishing)
+Se usa el mejor modelo (Random Forest) con tasas observadas en prueba.
+- Phishing estimado: 7,500
+- Legitimo estimado: 42,500
+- Tasa de verdaderos positivos (TPR): 1547/(1547+167)=0.9026
+- Tasa de falsos positivos (FPR): 195/(195+1520)=0.1137
+
+Resultados esperados:
+- TP: 6,769
+- FN: 731
+- FP: 4,832
+- TN: 37,668
+
+Alarmas generadas (predicho phishing):
+- Total alarmas: 11,601
+- Positivas correctas (TP): 6,769
+- Positivas falsas (FP): 4,832
+
+Predicciones negativas (predicho legitimo):
+- Negativas correctas (TN): 37,668
+- Negativas incorrectas (FN): 731
+
+Conclusion para el BR:
+El modelo es util porque captura la mayor parte del phishing, pero 4,832 falsas alarmas puede ser una carga alta para operacion.
+
+Para reducir falsas alarmas:
+1) Ajustar el umbral de decision (mayor a 0.5) segun capacidad operativa.
+2) Usar un esquema de dos etapas: modelo de alta sensibilidad + verificacion adicional para casos dudosos.
+3) Calibrar probabilidades y seleccionar umbral con curva Precision-Recall y costo de negocio.
+4) Enriquecer features con senales de reputacion de dominio y contexto de email para mejorar precision.
